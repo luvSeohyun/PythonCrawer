@@ -1,7 +1,7 @@
 # PythonCrawer
 self learn about crawerBook
 
-linkCrawer.py   : chapter1
+linkCrawer.py   : chapter1\n
 scraping.py     : chapter2
 DownloadCache.py: chapter3
 
