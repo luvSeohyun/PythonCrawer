@@ -5,6 +5,7 @@ import re
 from urllib.parse import urljoin, urlsplit
 from urllib.error import URLError, HTTPError, ContentTooShortError
 import os
+import json
 
 
 class Downloader:
@@ -32,13 +33,13 @@ class Downloader:
             self.throttle.wait(url)
             proxies = choice(self.proxies) if self.proxies else None
             headers = {'User-Agengt': self.user_agent}
-            result = self.download(url, headers, proxies)
+            result = self.download(url, headers, proxies, self.num_retries)
             if self.cache:
                 # save to cache
                 self.cache[url] = result
         return result['html']
 
-    def download(self, url, headers, proxies):  #rewrtie download in linkCrawler.py
+    def download(self, url, headers, proxies, num_retries):  #rewrtie download in linkCrawler.py
         print('downloading:', url)
         request = urllib.request.Request(url)
         request.add_header('User-agent', self.user_agent)  # 设置用户代理
@@ -55,10 +56,10 @@ class Downloader:
         except (URLError, HTTPError, ContentTooShortError) as e:  # 避免下载时遇到的无法控制错误
             print('Downlaod error:', e.reason)
             html = None
-            if self.num_retries > 0:
+            if num_retries > 0:
                 if hasattr(e, 'code') and 500 <= e.code <= 600:  # 5XX错误，服务器端存在问题，下载重试
-                    return self.download(url, headers, self.num_retries - 1)
-        return {'html': html, 'code': resp.status_code}
+                    return self.download(url, headers, num_retries - 1)
+        return {'html': html, 'code': resp.status}
 
 
 def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scrape_callback=None, max_depth=4, delay=1,
@@ -114,5 +115,23 @@ class DiskCache:
         filename = '/'.join(segment[:255] for segment in url.split('/'))
         return os.path.join(self.cache_dir, filename)
 
+    def __getitem__(self, url):
+        """Load data from disk for given URL"""
+        path = self.url_to_path(url)
+        if os.path.exists(path):
+            return json.load(path)
+        else:
+            # URL has not yet been cached
+            raise KeyError(url + 'not exist')
+
+    def __setitem__(self, url, result):
+        """Save data to disk for given url"""
+        path = self.url_to_path(url)  # 映射为安全文件名
+        folder = os.path.dirname(path)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        json.dump(result, path)  # 序列化处理，然后保存到磁盘
+
 if __name__ == "__main__":
     """如果执行一个大型爬虫工作，缓存可以无需重新爬取可能已抓取的页面，并能离线访问页面"""
+    link_crawler('http://example.python-scraping.com/', '/(index|view)', cache=DiskCache())
