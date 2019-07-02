@@ -4,8 +4,8 @@ import urllib
 import re
 from urllib.parse import urljoin, urlsplit
 from urllib.error import URLError, HTTPError, ContentTooShortError
-import os
-import json
+import os,json,zlib
+from datetime import datetime, timedelta
 
 
 class Downloader:
@@ -39,7 +39,7 @@ class Downloader:
                 self.cache[url] = result
         return result['html']
 
-    def download(self, url, headers, proxies, num_retries):  #rewrtie download in linkCrawler.py
+    def download(self, url, headers, proxies, num_retries):  # rewrtie download in linkCrawler.py
         print('downloading:', url)
         request = urllib.request.Request(url)
         request.add_header('User-agent', self.user_agent)  # 设置用户代理
@@ -98,9 +98,12 @@ def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scra
 
 
 class DiskCache:
-    def __init__(self, cache_dir='cache', max_len=255):
+    def __init__(self, cache_dir='cache', max_len=255, compress=True, encoding='utf-8', expires=timedelta(days=30)):
         self.cache_dir = cache_dir
         self.max_len = max_len
+        self.compress = compress
+        self.encoding = encoding
+        self.expires = expires
 
     def url_to_path(self, url):  # 磁盘缓存边界情况处理
         """return file system path string for givin URL"""
@@ -111,26 +114,45 @@ class DiskCache:
         elif path.endswith('/'):
             path += 'index.html'
         filename = components.netloc + path + components.query
-        filename = re.sub('[^/0-9a-zA-Z\-.,;_]', '_', url)
-        filename = '/'.join(segment[:255] for segment in url.split('/'))
+        filename = re.sub('[^/0-9a-zA-Z\-.,;_]', '_', filename)
+        filename = '/'.join(segment[:255] for segment in filename.split('/'))
         return os.path.join(self.cache_dir, filename)
 
     def __getitem__(self, url):
         """Load data from disk for given URL"""
         path = self.url_to_path(url)
+        mode = ('rb' if self.compress else 'r')
         if os.path.exists(path):
-            return json.load(path)
+            with open(path, mode) as fp:  # 最小化缓存所需空间
+                if self.compress:
+                    data = zlib.decompress(fp.read()).decode(self.encoding)
+                    return json.loads(data)
+                else:
+                    data = json.load(fp)
+                exp_date = data.get('expires')
+                if exp_date and datetime.strftime(exp_date, '%Y-%m-%dT%H:%M:%S') <= datetime.utcnow():
+                    print('cache expired!', exp_date)
+                    raise KeyError(url + 'has expired.')
+                return data
         else:
             # URL has not yet been cached
             raise KeyError(url + 'not exist')
 
     def __setitem__(self, url, result):
         """Save data to disk for given url"""
+        result['expires'] = (datetime.utcnow() + self.expires).isoformat(timespec='seconds')
         path = self.url_to_path(url)  # 映射为安全文件名
         folder = os.path.dirname(path)
         if not os.path.exists(folder):
             os.makedirs(folder)
-        json.dump(result, path)  # 序列化处理，然后保存到磁盘
+        mode = ('wb' if self.compress else 'w')
+        with open(path, mode) as fp:
+            if self.compress:
+                data = bytes(json.dumps(result), self.encoding)
+                fp.write(zlib.compress(data))
+            else:
+                json.dump(result, path)  # 序列化处理，然后保存到磁盘
+
 
 if __name__ == "__main__":
     """如果执行一个大型爬虫工作，缓存可以无需重新爬取可能已抓取的页面，并能离线访问页面"""
