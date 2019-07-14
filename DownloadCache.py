@@ -2,14 +2,22 @@ from linkCrawler import Throttle, get_robots_parser, get_links
 from random import choice
 import urllib
 import re
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, quote
 from urllib.error import URLError, HTTPError, ContentTooShortError
-import os,json,zlib
+import os
+import json
+import zlib
 from datetime import datetime, timedelta
+from redis import StrictRedis
+import string
+from lxml.html import fromstring
+
+
+FIELDS = ('//div[@class="book-info "]/h1/em', '//p[@class="intro"]', '//div[@class="book-intro"]/p')
 
 
 class Downloader:
-    def __init__(self, delay=5, user_agent="wswp", proxies=None, cache={}):
+    def __init__(self, delay=10, user_agent="wswp", proxies=None, cache={}):
         self.throttle = Throttle(delay)
         self.user_agent = user_agent
         self.proxies = proxies
@@ -41,7 +49,7 @@ class Downloader:
 
     def download(self, url, headers, proxies, num_retries):  # rewrtie download in linkCrawler.py
         print('downloading:', url)
-        request = urllib.request.Request(url)
+        request = urllib.request.Request(quote(url, safe=string.printable))
         request.add_header('User-agent', self.user_agent)  # 设置用户代理
         try:
             if proxies:
@@ -56,6 +64,8 @@ class Downloader:
         except (URLError, HTTPError, ContentTooShortError) as e:  # 避免下载时遇到的无法控制错误
             print('Downlaod error:', e.reason)
             html = None
+            if e.code == 400 and e.reason == "Bad Request":
+                return {'html': html, 'code': 404}
             if num_retries > 0:
                 if hasattr(e, 'code') and 500 <= e.code <= 600:  # 5XX错误，服务器端存在问题，下载重试
                     return self.download(url, headers, num_retries - 1)
@@ -63,11 +73,14 @@ class Downloader:
 
 
 def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scrape_callback=None, max_depth=4, delay=1,
-                 proxies=None, num_retries=2, cache={}):
+                 proxies=None, num_retries=10, cache={}):
     """传入要爬取的网站URL和匹配想跟踪的链接的正则表达式
     如果要禁用深度判断(爬虫陷阱——动态生成的页面)——max_depth改为负数
     Crawl from the given start URL following links matched by link_regex"""
-    crawl_queue = [start_url]
+    if isinstance(start_url, list):
+        crawl_queue = start_url
+    else:
+        crawl_queue = [start_url]
     seen = {start_url: 0}  # 修改为字典，而不是set。不再只记录访问过的网页链接。 增加已发现链接的深度记录
     if not robots_url:
         robots_url = '{}/robots.txt'.format(start_url)
@@ -154,6 +167,49 @@ class DiskCache:
                 json.dump(result, path)  # 序列化处理，然后保存到磁盘
 
 
+class RedisCache:
+    def __init__(self, client=None, expires=timedelta(days=30), encoding='utf-8', compress=True):
+        # if a client object is not passed then try
+        # connecting to redis at the default localhost port
+        self.client = StrictRedis(host='localhost', port=6379, db=0, charset=encoding,
+                                  errors='ignore') \
+            if client is None else client
+        self.expires = expires
+        self.encoding = encoding
+        self.compress = compress
+
+    def __getitem__(self, url):
+        """Load value from redis for given URL"""
+        record = self.client.get(url)
+        if record:
+            if self.compress:
+                record = zlib.decompress(record)
+            return json.loads(record.decode(self.encoding))
+        else:
+            # URL has not yet been cached
+            raise KeyError(url + 'not exist')
+
+    def __setitem__(self, url, result):
+        """Save value in redis for given url"""
+        if re.search('/info/', url) and result['code'] != 404:
+            tree = fromstring(result['html'])
+            result['saved'] = [tree.xpath('%s' % field)[i].text_content() for field in FIELDS
+                           for i in range(len(tree.xpath('%s' % field)))]
+            print(result['saved'])
+        data = bytes(json.dumps(result), self.encoding)
+        if self.compress:
+            data = zlib.compress(data)
+        self.client.setex(url, self.expires, data)
+
+
 if __name__ == "__main__":
     """如果执行一个大型爬虫工作，缓存可以无需重新爬取可能已抓取的页面，并能离线访问页面"""
-    link_crawler('http://example.python-scraping.com/', '/(index|view)', cache=DiskCache())
+    if 0:
+        # link_crawler('http://example.python-scraping.com/', '/(index|view)', cache=DiskCache())
+        link_crawler('http://example.python-scraping.com/', '/(index|view)', cache=RedisCache())
+    else:
+        link_crawler('https://www.qidian.com', 'info', cache=RedisCache())
+    # redis test
+    # r = StrictRedis(host='localhost', port=6379, db=0)
+    # r.set('test', 'answer')
+    # print(r.get('test'))

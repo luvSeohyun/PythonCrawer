@@ -95,6 +95,7 @@ def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scra
 def get_links(html):
     """Return a list of links from html"""
     webpage_regex = re.compile("""<a[^>]+href=["'](.*?)["']""", re.IGNORECASE)  # re.I不区分大小写的匹配
+    # webpage_regex = re.compile(""".""", re.IGNORECASE)  # re.I不区分大小写的匹配
     return webpage_regex.findall(html)
 
 
