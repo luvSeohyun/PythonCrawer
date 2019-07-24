@@ -54,7 +54,7 @@ def bs_scraper(html):  # 31.42s
     return results
 
 
-def lxml_scraper(html):  # 4.23s
+def lxml_scraper(html):  # 4.23s， lxml+cssselect, $('tr')
     tree = fromstring(html)
     results = {}
     for field in FIELDS:
@@ -62,7 +62,7 @@ def lxml_scraper(html):  # 4.23s
     return results
 
 
-def lxml_xpath_scraper(html):  # 1.07s
+def lxml_xpath_scraper(html):  # 1.07s  lxml+xpath $x('//tr')
     tree = fromstring(html)
     results = {}
     for field in FIELDS:

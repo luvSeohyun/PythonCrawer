@@ -18,10 +18,10 @@ FIELDS = ('//div[@class="book-info "]/h1/em', '//p[@class="intro"]', '//div[@cla
 
 class Downloader:
     def __init__(self, delay=10, user_agent="wswp", proxies=None, cache={}):
-        self.throttle = Throttle(delay)
+        self.throttle = Throttle(delay)  #限速移到内部
         self.user_agent = user_agent
         self.proxies = proxies
-        self.num_retries = None  # 每次请求时设置
+        self.num_retries = None  # 每次请求时设置， 基于每个url设置请求重试
         self.cache = cache
 
     def __call__(self, url, num_retries=2):
@@ -72,7 +72,7 @@ class Downloader:
         return {'html': html, 'code': resp.status}
 
 
-def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scrape_callback=None, max_depth=4, delay=1,
+def link_crawler(start_url, link_regex, robots_url=None, user_agent='wstest', scrape_callback=None, max_depth=1, delay=1,
                  proxies=None, num_retries=10, cache={}):
     """传入要爬取的网站URL和匹配想跟踪的链接的正则表达式
     如果要禁用深度判断(爬虫陷阱——动态生成的页面)——max_depth改为负数
@@ -82,8 +82,8 @@ def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scra
     else:
         crawl_queue = [start_url]
     seen = {start_url: 0}  # 修改为字典，而不是set。不再只记录访问过的网页链接。 增加已发现链接的深度记录
-    if not robots_url:
-        robots_url = '{}/robots.txt'.format(start_url)
+    # if not robots_url:
+    #     robots_url = '{}/robots.txt'.format(start_url)
     rp = get_robots_parser(robots_url)
     D = Downloader(delay=delay, user_agent=user_agent, proxies=proxies, cache=cache)
     while crawl_queue:
@@ -110,7 +110,7 @@ def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scra
             print('blocked by robots.txt:', url)
 
 
-class DiskCache:
+class DiskCache:  # 磁盘缓存
     def __init__(self, cache_dir='cache', max_len=255, compress=True, encoding='utf-8', expires=timedelta(days=30)):
         self.cache_dir = cache_dir
         self.max_len = max_len
@@ -142,7 +142,7 @@ class DiskCache:
                     return json.loads(data)
                 else:
                     data = json.load(fp)
-                exp_date = data.get('expires')
+                exp_date = data.get('expires')  #清理过期数据
                 if exp_date and datetime.strftime(exp_date, '%Y-%m-%dT%H:%M:%S') <= datetime.utcnow():
                     print('cache expired!', exp_date)
                     raise KeyError(url + 'has expired.')
@@ -171,7 +171,7 @@ class RedisCache:
     def __init__(self, client=None, expires=timedelta(days=30), encoding='utf-8', compress=True):
         # if a client object is not passed then try
         # connecting to redis at the default localhost port
-        self.client = StrictRedis(host='localhost', port=6379, db=0, charset=encoding,
+        self.client = StrictRedis(host='localhost', port=6379, db=1, charset=encoding,
                                   errors='ignore') \
             if client is None else client
         self.expires = expires
@@ -209,6 +209,7 @@ if __name__ == "__main__":
         link_crawler('http://example.python-scraping.com/', '/(index|view)', cache=RedisCache())
     else:
         link_crawler('https://www.qidian.com', 'info', cache=RedisCache())
+        # link_crawler('https://book.qidian.com/info/3321300#Catalog', 'info', cache=RedisCache())
     # redis test
     # r = StrictRedis(host='localhost', port=6379, db=0)
     # r.set('test', 'answer')
