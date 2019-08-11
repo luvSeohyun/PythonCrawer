@@ -1,9 +1,12 @@
 import re
-from linkCrawler import download, link_crawler
+from linkCrawler import download, link_crawler, link_crawler_bili
 from bs4 import BeautifulSoup
 from lxml.html import fromstring, tostring
 import time
 import csv
+import xlwt
+import xlrd
+from xlutils.copy import copy
 
 
 FIELDS = ('area', 'population', 'iso', 'country_or_district', 'capital', 'continent', 'tld', 'currency_code',
@@ -37,6 +40,45 @@ class CsvQidianCallback:
                         for i in range(len(tree.xpath('%s' % field)))]
             self.writer.writerow(all_rows)
 
+
+class CsvBiliCallback:
+    def __init__(self):
+        self.num = 21802
+        if 0:
+            book = xlwt.Workbook(encoding="utf-8")
+            sheet = book.add_sheet("notice&info")
+            all_rows = ["url", "notice", "name", "sex", "sign"]
+            print(all_rows)
+        # all_rows = [tree.xpath('%s' % field)[i].text_content() for field in self.fields
+        #             for i in range(len(tree.xpath('%s' % field)))]
+            for i in range(len(all_rows)):
+                sheet.write(self.num, i, all_rows[i])
+            self.num += 1
+            book.save("bili/{}.xls".format("biliInfo"))
+        # self.fields = ('//div[@class="i-ann-content"]', '//div[@class="h-basic-spacing"]/h4', '//span[@id="h-name"]')
+
+    def __call__(self, url, data, info):
+        # num = 0
+        book = xlrd.open_workbook("bili/biliInfo.xls")
+        sheet = book.sheet_by_index(0)
+        newbook = copy(book)
+        newsheet = newbook.get_sheet(0)
+        bname = info["name"] if "name" in info.keys() else ""
+        bsex = info["sex"] if "sex" in info.keys() else ""
+        bsign = info["sign"] if "sign" in info.keys() else ""
+        all_rows = [url, data, bname, bsex, bsign]
+        print(all_rows)
+        # all_rows = [tree.xpath('%s' % field)[i].text_content() for field in self.fields
+        #             for i in range(len(tree.xpath('%s' % field)))]
+        name = url.split("/")
+        for i in range(len(all_rows)):
+            newsheet.write(self.num, i, all_rows[i])
+        self.num += 1
+
+        newbook.save("bili/{}.xls".format("biliInfo"))
+
+    def save(self):
+        self.book.save("bili/content.xls")
 
 
 def re_scraper(html):  # 3.2s
@@ -159,5 +201,7 @@ if __name__ == '__main__':
         # trees = fromstring(htmls)
         # intros = trees.xpath('//div[@class="book-intro"]/p/text()')
         # print(intros)
-        link_crawler('https://www.qidian.com', '/(info)/', max_depth=10,
-                    scrape_callback=CsvQidianCallback())
+        # link_crawler('https://www.qidian.com', '/(info)/', max_depth=10,
+        #             scrape_callback=CsvQidianCallback())
+        link_crawler_bili('https://api.bilibili.com', '/(space)/',
+                    scrape_callback=CsvBiliCallback())

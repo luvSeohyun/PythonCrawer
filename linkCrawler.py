@@ -1,5 +1,6 @@
 import whois
 import urllib.request
+import requests
 from urllib.error import URLError, HTTPError, ContentTooShortError
 import re
 import itertools
@@ -19,6 +20,8 @@ def get_sitemaps(url):  # 起点用，从robot开始网站地图爬虫，之获�
 def download(url, user_agent='wswp', num_retries=2, charset='utf-8', proxy=None):  # proxy设置代理， 可能不支持https代理
     print('downloading:', url)
     request = urllib.request.Request(url)
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " \
+                 "Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134"
     request.add_header('User-agent', user_agent)  # 设置用户代理
     """Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134"""
     try:
@@ -47,17 +50,69 @@ def crawl_sitemap(url):  # 无法依靠sitemap文件提供每个网页的链接
         html = download(link)
 
 
-def crawl_site(url, max_errors=5):  # 只利用ID来下载所有国家或地区的页面， 数据库ID不一定连续
+def crawl_site(url, throttle, link_regex, scrape_callback=None, max_errors=10):  # 只利用ID来下载所有国家或地区的页面， 数据库ID不一定连续
     # 改进版， 连续发生多次错误后才推出程序
-    for page in itertools.count(1):
-        pg_url = '{}{}'.format(url, page)
-        html = download(pg_url)
-        if html is None:
+    errors = 0
+    for page in itertools.count(21837):
+        """请求 URL: https://api.bilibili.com/x/space/notice?mid=14100618&jsonp=jsonp"""
+        pg_url = '{}/x/space/notice?mid={}&jsonp=jsonp'.format(url, page)
+        acc = '{}/x/space/acc/info?mid={}&jsonp=jsonp'.format(url, page)
+        space_url = "https://space.bilibili.com/{}".format(page)
+        # time.sleep(1)
+        headers = {
+            "Host": "api.bilibili.com",
+            "Origin": "https://space.bilibili.com",
+            "Referer": "https: // space.bilibili.com / " + str(page),
+            "User - Agent": "Mozilla / 5.0(Windows NT 10.0;\
+        Win64;\
+        x64) AppleWebKit / 537.36(KHTML, like\
+        Gecko) Chrome / 64.0\
+        .3282\
+        .140\
+        Safari / 537.36\
+        Edge / 17.17134"
+        }
+        res = requests.get(pg_url, headers, timeout=60)
+        info = requests.get(acc, headers, timeout=60)
+        # html = download(pg_url)
+        """if html is None:
             num_errors += 1
             if num_errors == max_errors:
                 break
             else:
                 num_errors = 0
+        """
+        if res.status_code != 200 and info.status_code != 200:
+            html = download(space_url)
+            flag = False
+            if not html or "404" in html:
+                flag = True
+            if errors > max_errors and flag:
+                print(res)
+                return
+            else:
+                if flag:
+                    print("res error:{}, errors:{}".format(res, errors))
+                    errors += 1
+                else:
+                    errors = 0
+                continue
+        if res.json().get("data"):
+            infos = None
+            if info.json().get("data"):
+                infos = info.json().get("data")
+            data = res.json().get("data")
+            if scrape_callback:  # 为链接爬虫添加抓取回调——第二章
+                surl = "https://space.bilibili.com/" + str(page)
+                scrape_callback(surl, data, infos)
+        elif info.json().get("data"):
+            data = None
+            if res.json().get("data"):
+                data = res.json().get("data")
+            infos = info.json().get("data")
+            if scrape_callback:  # 为链接爬虫添加抓取回调——第二章
+                surl = "https://space.bilibili.com/" + str(page)
+                scrape_callback(surl, data, infos)
 
 
 def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scrape_callback=None, max_depth=4, delay=1):
@@ -93,6 +148,18 @@ def link_crawler(start_url, link_regex, robots_url=None, user_agent='wswp', scra
                         crawl_queue.append(abs_link)
         else:
             print('blocked by robots.txt:', url)
+
+
+def link_crawler_bili(start_url, link_regex, user_agent='wswp', scrape_callback=None, delay=1):
+    """跟踪每个链接，更容易下载整个网站页面。
+    传入：要爬取的网站URL和匹配想跟踪的链接的正则表达式
+    如果要禁用深度判断(爬虫陷阱——动态生成的页面)——max_depth改为负数
+    Crawl from the given start URL following links matched by link_regex
+    bilibili用户获取用户信息"""
+    throttle = Throttle(delay)
+    crawl_site(start_url, throttle, link_regex, scrape_callback)
+    # if scrape_callback:
+    #     scrape_callback.save()
 
 
 def get_links(html):
