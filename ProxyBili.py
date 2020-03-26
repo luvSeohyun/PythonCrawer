@@ -4,6 +4,7 @@ from random import choice
 import urllib
 import string
 from urllib.parse import urljoin, urlsplit, quote
+import itertools
 
 
 class Downloader:
@@ -58,3 +59,15 @@ class Downloader:
                 if hasattr(e, 'code') and 500 <= e.code <= 600:  # 5XX错误，服务器端存在问题，下载重试
                     return self.download(url, headers, num_retries - 1)
         return {'html': html, 'code': resp.status}
+
+
+if __name__ == "__main__":
+    flag = True
+    for page in itertools.count(2):
+        print(page)
+        if page == 2 and flag:
+            flag = False
+            page -= 1
+            continue
+        if page > 5:
+            break

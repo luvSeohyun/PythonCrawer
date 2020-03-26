@@ -2,6 +2,7 @@ import whois
 import urllib.request
 import requests
 from urllib.error import URLError, HTTPError, ContentTooShortError
+from requests.exceptions import ConnectionError
 import re
 import itertools
 from urllib.parse import urljoin, urlparse
@@ -53,12 +54,14 @@ def crawl_sitemap(url):  # 无法依靠sitemap文件提供每个网页的链接
 def crawl_site(url, throttle, link_regex, scrape_callback=None, max_errors=10):  # 只利用ID来下载所有国家或地区的页面， 数据库ID不一定连续
     # 改进版， 连续发生多次错误后才推出程序
     errors = 0
-    for page in itertools.count(21837):
+    # 69216
+    # 151963
+    for page in itertools.count(451982):
         """请求 URL: https://api.bilibili.com/x/space/notice?mid=14100618&jsonp=jsonp"""
         pg_url = '{}/x/space/notice?mid={}&jsonp=jsonp'.format(url, page)
         acc = '{}/x/space/acc/info?mid={}&jsonp=jsonp'.format(url, page)
         space_url = "https://space.bilibili.com/{}".format(page)
-        # time.sleep(1)
+        time.sleep(1)
         headers = {
             "Host": "api.bilibili.com",
             "Origin": "https://space.bilibili.com",
@@ -72,8 +75,24 @@ def crawl_site(url, throttle, link_regex, scrape_callback=None, max_errors=10): 
         Safari / 537.36\
         Edge / 17.17134"
         }
-        res = requests.get(pg_url, headers, timeout=60)
-        info = requests.get(acc, headers, timeout=60)
+        repeat = 3
+        while repeat > 0:  # 处理云端强制关闭
+            try:
+                res = requests.get(pg_url, headers, timeout=60)
+                break
+            except ConnectionError:
+                print("Connection Error")
+                time.sleep(600)
+                repeat -= 1
+        repeat = 3
+        while repeat > 0:
+            try:
+                info = requests.get(acc, headers, timeout=60)
+                break
+            except ConnectionError:
+                print("Connection Error")
+                time.sleep(600)
+                repeat -= 1
         # html = download(pg_url)
         """if html is None:
             num_errors += 1

@@ -42,9 +42,11 @@ class CsvQidianCallback:
 
 
 class CsvBiliCallback:
+    fileName = "biliInfo7"
+
     def __init__(self):
-        self.num = 21802
-        if 0:
+        self.num = 0
+        if 1:
             book = xlwt.Workbook(encoding="utf-8")
             sheet = book.add_sheet("notice&info")
             all_rows = ["url", "notice", "name", "sex", "sign"]
@@ -54,12 +56,13 @@ class CsvBiliCallback:
             for i in range(len(all_rows)):
                 sheet.write(self.num, i, all_rows[i])
             self.num += 1
-            book.save("bili/{}.xls".format("biliInfo"))
+            book.save("bili/{}.xls".format(self.fileName))
         # self.fields = ('//div[@class="i-ann-content"]', '//div[@class="h-basic-spacing"]/h4', '//span[@id="h-name"]')
 
     def __call__(self, url, data, info):
         # num = 0
-        book = xlrd.open_workbook("bili/biliInfo.xls")
+        # max 65536
+        book = xlrd.open_workbook("bili/{}.xls".format(self.fileName))
         sheet = book.sheet_by_index(0)
         newbook = copy(book)
         newsheet = newbook.get_sheet(0)
@@ -67,7 +70,7 @@ class CsvBiliCallback:
         bsex = info["sex"] if "sex" in info.keys() else ""
         bsign = info["sign"] if "sign" in info.keys() else ""
         all_rows = [url, data, bname, bsex, bsign]
-        print(all_rows)
+        print("{}:{}".format(self.num, all_rows))
         # all_rows = [tree.xpath('%s' % field)[i].text_content() for field in self.fields
         #             for i in range(len(tree.xpath('%s' % field)))]
         name = url.split("/")
@@ -75,7 +78,7 @@ class CsvBiliCallback:
             newsheet.write(self.num, i, all_rows[i])
         self.num += 1
 
-        newbook.save("bili/{}.xls".format("biliInfo"))
+        newbook.save("bili/{}.xls".format(self.fileName))
 
     def save(self):
         self.book.save("bili/content.xls")
