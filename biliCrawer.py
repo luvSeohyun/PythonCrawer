@@ -66,7 +66,10 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
     errors = 0
     # 69216
     # 151963
-    for page in itertools.count(0):
+    start = 0
+    if scrape_callback:
+        start = scrape_callback.num
+    for page in itertools.count(start):
         if page > 65535:
             ids.remove(mid)
             break
@@ -157,6 +160,7 @@ class CsvBiliCallback:
             with open("bili/saved/indexs.txt", "r") as f:
                 alllines = f.readlines()
                 self.num = alllines[indexs]
+                self.num = int(self.num[:len(self.num) - 1])
 
     def __call__(self, url, data, info):
         # num = 0
@@ -179,10 +183,11 @@ class CsvBiliCallback:
         self.save()
 
     def save(self):
-        with open("bili/saved/indexs.txt", "w+") as fl:
+        with open("bili/saved/indexs.txt", "r+") as fl:
             alllines = fl.readlines()
             nowline = int(self.fileName[-1])
-            alllines[nowline] = self.num
+            alllines[nowline] = str(self.num) + "\n"
+            fl.seek(0)
             fl.writelines(alllines)
 
 
