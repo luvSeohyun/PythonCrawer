@@ -9,6 +9,7 @@ from urllib.error import URLError, HTTPError, ContentTooShortError
 import xlrd
 import xlwt
 from xlutils.copy import copy
+from os.path import exists
 
 
 def load_user_agent(url):
@@ -138,8 +139,9 @@ class CsvBiliCallback:
 
     def __init__(self):
         self.num = 0
-        if 1:
-            self.fileName += str(indexs)
+        self.fileName += str(indexs)
+        existfile = exists("bili/saved/{}.xls".format(self.fileName))
+        if not existfile:
             book = xlwt.Workbook(encoding="utf-8")
             sheet = book.add_sheet("notice&info")
             all_rows = ["url", "notice", "name", "sex", "sign"]
@@ -151,6 +153,10 @@ class CsvBiliCallback:
             self.num += 1
             book.save("bili/saved/{}.xls".format(self.fileName))
         # self.fields = ('//div[@class="i-ann-content"]', '//div[@class="h-basic-spacing"]/h4', '//span[@id="h-name"]')
+        else:
+            with open("bili/saved/indexs.txt", "r") as f:
+                alllines = f.readlines()
+                self.num = alllines[indexs]
 
     def __call__(self, url, data, info):
         # num = 0
