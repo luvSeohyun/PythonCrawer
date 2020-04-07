@@ -10,6 +10,7 @@ import xlrd
 import xlwt
 from xlutils.copy import copy
 from os.path import exists
+import pymongo
 
 
 def load_user_agent(url):
@@ -27,7 +28,7 @@ def get_ids(start, count):
     if start < 1:
         start = 1
     for ii in range(1, count + 1):
-        tmp = start + 65536*(ii - 1)
+        tmp = start + 600000*(ii - 1)
         idss.append(tmp)
     return idss
 
@@ -70,7 +71,7 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
     if scrape_callback:
         start = scrape_callback.num
     for page in itertools.count(start):
-        if page > 65535:
+        if page >= 655360:
             ids.remove(mid)
             break
         """请求 URL: https://api.bilibili.com/x/space/notice?mid=14100618&jsonp=jsonp"""
@@ -126,7 +127,7 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
             data = res.json().get("data")
             if scrape_callback:
                 surl = "https://space.bilibili.com/" + str(page + mid)
-                scrape_callback(surl, data, infos)
+                scrape_callback(surl, data, infos, page + mid)
         elif info.json().get("data"):
             data = None
             if res.json().get("data"):
@@ -134,7 +135,7 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
             infos = info.json().get("data")
             if scrape_callback:
                 surl = "https://space.bilibili.com/" + str(page + mid)
-                scrape_callback(surl, data, infos)
+                scrape_callback(surl, data, infos, page + mid)
 
 
 class CsvBiliCallback:
@@ -186,6 +187,45 @@ class CsvBiliCallback:
         with open("bili/saved/indexs.txt", "r+") as fl:
             alllines = fl.readlines()
             nowline = int(self.fileName[-1])
+            alllines[nowline] = str(self.num) + "\n"
+            fl.seek(0)
+            fl.writelines(alllines)
+
+
+class MongoBiliCallback:
+    fileName = "biliInfo"
+
+    def __init__(self):
+        self.num = 0
+        self.flags = indexs
+        self.fileName += str(indexs)
+        client = pymongo.MongoClient("localhost", "27017")
+        database = client["biliLists"]
+        self.db = database["bili{}".format(self.flags)]
+        if self.db in database.list_collection_names():
+            with open("bili/saved/indexs.txt", "r") as f:
+                alllines = f.readlines()
+                self.num = alllines[indexs]
+                self.num = int(self.num[:len(self.num) - 1])
+
+    def __call__(self, url, data, info, idss):
+        # num = 0
+        # max 65536
+        bname = info["name"] if "name" in info.keys() else ""
+        bsex = info["sex"] if "sex" in info.keys() else ""
+        bsign = info["sign"] if "sign" in info.keys() else ""
+        all_rows = ["url", "notice", "name", "sex", "sign"]
+        datas = {"_id": idss, all_rows[0]: url, all_rows[1]: data, all_rows[2]: bname, all_rows[3]: bsex, all_rows[4]: bsign}
+        print("{}:{}".format(self.num, datas))
+        self.num += 1
+        self.db.insert_one(datas)
+
+        self.save()
+
+    def save(self):
+        with open("bili/saved/indexs.txt", "r+") as fl:
+            alllines = fl.readlines()
+            nowline = self.flags
             alllines[nowline] = str(self.num) + "\n"
             fl.seek(0)
             fl.writelines(alllines)
