@@ -63,13 +63,14 @@ def download(url, num_retries=2, charset='utf-8', proxy=None):  # proxy设置代
 
 
 def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来下载所有国家或地区的页面， 数据库ID不一定连续
+    global ids
     # 改进版， 连续发生多次错误后才推出程序
     errors = 0
     # 69216
     # 151963
     start = 0
     if scrape_callback:
-        start = scrape_callback.num
+        start = scrape_callback.num - mid + 1  # 存储的为page+mid
     for page in itertools.count(start):
         if page >= 655360:
             ids.remove(mid)
@@ -199,36 +200,25 @@ class MongoBiliCallback:
         self.num = 0
         self.flags = indexs
         self.fileName += str(indexs)
-        client = pymongo.MongoClient("localhost", "27017")
+        client = pymongo.MongoClient("localhost", 27017)
         database = client["biliLists"]
-        self.db = database["bili{}".format(self.flags)]
-        if self.db in database.list_collection_names():
-            with open("bili/saved/indexs.txt", "r") as f:
-                alllines = f.readlines()
-                self.num = alllines[indexs]
-                self.num = int(self.num[:len(self.num) - 1])
+        table_name = "bili{}".format(self.flags)
+        self.db = database[table_name]
+        if table_name in database.list_collection_names():  # 找到已存储的最大mid
+            max_item = self.db.find().sort("_id", -1)
+            self.num = max_item[0]["_id"]
 
     def __call__(self, url, data, info, idss):
-        # num = 0
-        # max 65536
-        bname = info["name"] if "name" in info.keys() else ""
-        bsex = info["sex"] if "sex" in info.keys() else ""
-        bsign = info["sign"] if "sign" in info.keys() else ""
+        bname = info["name"] if "name" in info.keys() else "None"
+        bsex = info["sex"] if "sex" in info.keys() else "None"
+        bsign = info["sign"] if "sign" in info.keys() else "None"
         all_rows = ["url", "notice", "name", "sex", "sign"]
-        datas = {"_id": idss, all_rows[0]: url, all_rows[1]: data, all_rows[2]: bname, all_rows[3]: bsex, all_rows[4]: bsign}
-        print("{}:{}".format(self.num, datas))
+        datas = {"_id": idss, all_rows[0]: url, all_rows[1]: data, all_rows[2]: bname, all_rows[3]: bsex,
+                 all_rows[4]: bsign}
+        print("{}:[{}, {}, {}, {}, {}]".format(self.num, datas[all_rows[0]], datas[all_rows[1]], datas[all_rows[2]],
+                                               datas[all_rows[3]], datas[all_rows[4]]))
         self.num += 1
         self.db.insert_one(datas)
-
-        self.save()
-
-    def save(self):
-        with open("bili/saved/indexs.txt", "r+") as fl:
-            alllines = fl.readlines()
-            nowline = self.flags
-            alllines[nowline] = str(self.num) + "\n"
-            fl.seek(0)
-            fl.writelines(alllines)
 
 
 if __name__ == "__main__":
@@ -242,7 +232,8 @@ if __name__ == "__main__":
                 indexs -= 1
         while len(threads) < counts and ids:
             # can start some more threads
-            thread = threading.Thread(target=crawl_site, args=('https://api.bilibili.com', ids[indexs], CsvBiliCallback()))
+            thread = threading.Thread(target=crawl_site, args=('https://api.bilibili.com', ids[indexs],
+                                                               MongoBiliCallback()))
             # set daemon so main thread can exit when receives ctrl-c
             thread.setDaemon(True)
             thread.start()
