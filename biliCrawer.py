@@ -6,10 +6,6 @@ import threading
 import time
 import urllib.request
 from urllib.error import URLError, HTTPError, ContentTooShortError
-import xlrd
-import xlwt
-from xlutils.copy import copy
-from os.path import exists
 import pymongo
 
 
@@ -107,6 +103,9 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
                 time.sleep(600)
                 repeat -= 1
         if res.status_code != 200 and info.status_code != 200:
+            if info.json().get('data') is None:
+                print('requests false. {}'.format(info.json()))
+                exit(-1)
             html = download(space_url)
             flag = False
             if not html or "404" in html:
@@ -125,6 +124,8 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
             infos = None
             if info.json().get("data"):
                 infos = info.json().get("data")
+            else:
+                print('info is None: {}'.format(info.json()))
             data = res.json().get("data")
             if scrape_callback:
                 surl = "https://space.bilibili.com/" + str(page + mid)
@@ -137,60 +138,6 @@ def crawl_site(url, mid, scrape_callback=None, max_errors=10):  # 只利用ID来
             if scrape_callback:
                 surl = "https://space.bilibili.com/" + str(page + mid)
                 scrape_callback(surl, data, infos, page + mid)
-
-
-class CsvBiliCallback:
-    fileName = "biliInfo"
-
-    def __init__(self):
-        self.num = 0
-        self.fileName += str(indexs)
-        existfile = exists("bili/saved/{}.xls".format(self.fileName))
-        if not existfile:
-            book = xlwt.Workbook(encoding="utf-8")
-            sheet = book.add_sheet("notice&info")
-            all_rows = ["url", "notice", "name", "sex", "sign"]
-            print(all_rows)
-        # all_rows = [tree.xpath('%s' % field)[i].text_content() for field in self.fields
-        #             for i in range(len(tree.xpath('%s' % field)))]
-            for ii in range(len(all_rows)):
-                sheet.write(self.num, ii, all_rows[ii])
-            self.num += 1
-            book.save("bili/saved/{}.xls".format(self.fileName))
-        # self.fields = ('//div[@class="i-ann-content"]', '//div[@class="h-basic-spacing"]/h4', '//span[@id="h-name"]')
-        else:
-            with open("bili/saved/indexs.txt", "r") as f:
-                alllines = f.readlines()
-                self.num = alllines[indexs]
-                self.num = int(self.num[:len(self.num) - 1])
-
-    def __call__(self, url, data, info):
-        # num = 0
-        # max 65536
-        book = xlrd.open_workbook("bili/saved/{}.xls".format(self.fileName))
-        sheet = book.sheet_by_index(0)
-        newbook = copy(book)
-        newsheet = newbook.get_sheet(0)
-        bname = info["name"] if "name" in info.keys() else ""
-        bsex = info["sex"] if "sex" in info.keys() else ""
-        bsign = info["sign"] if "sign" in info.keys() else ""
-        all_rows = [url, data, bname, bsex, bsign]
-        print("{}:{}".format(self.num, all_rows))
-        name = url.split("/")
-        for ii in range(len(all_rows)):
-            newsheet.write(self.num, ii, all_rows[ii])
-        self.num += 1
-
-        newbook.save("bili/saved/{}.xls".format(self.fileName))
-        self.save()
-
-    def save(self):
-        with open("bili/saved/indexs.txt", "r+") as fl:
-            alllines = fl.readlines()
-            nowline = int(self.fileName[-1])
-            alllines[nowline] = str(self.num) + "\n"
-            fl.seek(0)
-            fl.writelines(alllines)
 
 
 class MongoBiliCallback:
@@ -209,9 +156,9 @@ class MongoBiliCallback:
             self.num = max_item[0]["_id"]
 
     def __call__(self, url, data, info, idss):
-        bname = info["name"] if "name" in info.keys() else "None"
-        bsex = info["sex"] if "sex" in info.keys() else "None"
-        bsign = info["sign"] if "sign" in info.keys() else "None"
+        bname = info["name"] if ("name" in info.keys()) else "None"
+        bsex = info["sex"] if ("sex" in info.keys()) else "None"
+        bsign = info["sign"] if ("sign" in info.keys()) else "None"
         all_rows = ["url", "notice", "name", "sex", "sign"]
         datas = {"_id": idss, all_rows[0]: url, all_rows[1]: data, all_rows[2]: bname, all_rows[3]: bsex,
                  all_rows[4]: bsign}
