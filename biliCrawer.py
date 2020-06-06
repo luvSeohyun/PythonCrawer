@@ -197,8 +197,8 @@ class MongoBiliCallback:
     fileName = "biliInfo"
 
     def __init__(self):
-        self.num = 0
         self.flags = indexs
+        self.num = 0 + self.flags * 655360
         self.fileName += str(indexs)
         client = pymongo.MongoClient("localhost", 27017)
         database = client["biliLists"]
